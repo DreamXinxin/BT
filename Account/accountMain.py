@@ -4,7 +4,7 @@ __author__ = 'xin'
 """
 此文件是创建虚拟账户 
 """
-from BackTest_v1.Data.dataMain import HistoryData
+from Data.dataMain import HistoryData
 import talib
 import numpy as np
 from collections import OrderedDict

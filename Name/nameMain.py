@@ -4,11 +4,11 @@ __author__ = 'xin'
 此文件总回测文件api  类名称 可以自己命名 方便以后打包成自己的产品
 """
 import datetime
-from BackTest_v1.Account.accountMain import Account
+from Account.accountMain import Account
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from BackTest_v1.Data.dataMain import HistoryData
+from Data.dataMain import HistoryData
 
 
 class OurName(object):
@@ -87,7 +87,6 @@ class OurName(object):
         plt.grid(linestyle='-.')
         plt.show()
         # TODO 添加折线图 饼状图等 各图分开写
-
         pass
 
 

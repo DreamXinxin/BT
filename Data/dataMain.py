@@ -152,12 +152,12 @@ class HistoryData(object):
 
     def findData(self, start, end):
         date_list = self.getEveryDay(start, end)
-        file_path = 'E:\\BackTest\\BackTest_v1\\Data\\BTCUSD'
+        file_path = '/Users/billy/PycharmProjects/BackTest/BackTest_v1/Data/BTCUSD'
         file_list = []
         for i in os.listdir(file_path):
             for j in date_list:
                 if re.sub('-', '', j) in i:
-                    path = file_path + '\\{}'.format(i)
+                    path = file_path + '/{}'.format(i)
                     file_list.append(path)
         # print(file_list)
         data = self.appendData(file_list)
