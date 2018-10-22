@@ -8,7 +8,11 @@ from Account.accountMain import Account
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+# from matplotlib.pyplot import ion
 from Data.dataMain import HistoryData
+import os
+import threading
+import time
 
 
 class OurName(object):
@@ -58,10 +62,10 @@ class OurName(object):
             # 每日处理数据 传入当天日期
             handle_data(new_data, today=date_list[i], price_type=price_type)
 
-            # 计算每日净值
-
+        # 计算每日净值
         print('nameMain--{}'.format(account.allowSell_symbol))
         print(account.__dict__)
+        # self.outputData(account, start, end)
         self.report(account)
 
     # 获取当天之前的交易日日期
@@ -74,24 +78,59 @@ class OurName(object):
         # print('获取当天日期之前的数据：', new_data)
         return data[data.index <= tomorrow]
 
+    # 输出csv文件
+    def outputData(self, account, star, end):
+        df = pd.DataFrame()
+        df['time'] = account.csv_time_list
+        df['time_balance'] = account.csv_balance_list
+        df['open_price'] = account.csv_openPrice_list
+        df['close_price'] = account.csv_closePrice_list
+        df['data_price'] = account.csv_dataPrice_list
+        file_name = star + '_' + end
+
+        n = 1
+        while 1:
+            csv_path = '../outputData/{}_balance_{}.csv'
+            isExists = os.path.exists(csv_path.format(file_name, n))
+            print(n)
+            csv_path = csv_path.format(file_name, n)
+            if isExists:
+                csv_path = csv_path.format(file_name, n)
+                print(csv_path)
+                n += 1
+            else:
+                break
+        df.to_csv(csv_path, index=False)
+        pass
+
     # report 输出报告
     def report(self, account):
-        x = account.back_test_date
-        y = account.every_balance
+        # x = account.back_test_date
+        # y = account.every_balance
+        y = account.csv_dataPrice_list[:200]
+        x = account.csv_time_list[:200]
+        x = [datetime.datetime.strftime(s, "%Y-%m-%d %H:%M:%S") for s in x]
         # print(x,y)
-        plt.plot(x, y, marker='o')
-        # plt.yticks(range(50,150,5))
-        plt.xticks(rotation=45)
+        # plt.figure(figsize=(50, 40))
+        plt.tight_layout(pad=0.4, w_pad=3.0, h_pad=3.0)
+        plt.plot(np.array(x), np.array(y), label='dataPrice')
+        plt.xticks(np.array(x)[::10], np.array(x)[::10], rotation=45)
+        # plt.yticks(np.array(y)[::10], np.array(y)[::10])
+
+
         plt.ylabel('Balance')
         plt.xlabel('BackTestDate')
-        plt.grid(linestyle='-.')
+        # plt.grid(linestyle='-.')
+        # plt.legend()
         plt.show()
+        # plt.pause(2)
         # TODO 添加折线图 饼状图等 各图分开写
+
         pass
 
 
 if __name__ == '__main__':
-    OurName().backtest('2017-07-01', '2017-07-03', price_type='close')
+    OurName().backtest('2017-07-01', '2017-07-02', price_type='close')
 
 
 

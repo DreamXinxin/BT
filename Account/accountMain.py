@@ -9,6 +9,7 @@ import talib
 import numpy as np
 from collections import OrderedDict
 import datetime
+from Strategy.strategy1 import Demo
 
 
 class Order(object):
@@ -44,6 +45,14 @@ class Account(object):
         self.open_fee = 0.001                          # 开仓手续费
         self.close_fee = 0.001                         # 平仓手续费
 
+        self.csv_time_list = []
+        self.csv_balance_list = []
+        self.csv_openPrice_list = []
+        self.csv_closePrice_list = []
+        self.csv_dataPrice_list = []
+
+
+
         pass
 
     def get_history(self, symbol, start, end, freq):
@@ -67,11 +76,22 @@ class Account(object):
         real_data = data
         data = data[data.columns[-1]]
         print(data)
-        a = talib.MA(np.array(data), timeperiod=10)
+        # a = talib.MA(np.array(data), timeperiod=10)
         for i in range(len(data)):
             # print('data[i], a[i]', data[i], a[i])
             today = real_data.index[i]
-            if data[i] > a[i] and self.openFlag == True:
+            price = data[i]
+
+            info_d = {}
+            info_d['datetime'] = today
+            info_d['price'] = price
+            info_d['data'] = data
+            info_d['dataLen'] = i                  # 记入数据长度
+
+            # 获取开平仓信号
+            flag = Demo().run(info_d)
+            # if data[i] > a[i] and self.openFlag == True:
+            if flag == 1 and self.openFlag == True:
                 print('建仓 -- 价格{}'.format(data[i]))
                 # TODO 做交易 下单
                 # XXXXXXXXXX
@@ -81,9 +101,16 @@ class Account(object):
                     self.every_handle_BuyBalance(i, 1, price=data[i])
                 #######################
 
+                self.csv_openPrice_list.append(data[i])
+                self.csv_closePrice_list.append('')
+                self.csv_dataPrice_list.append(data[i])
+
+
                 self.sellFlag = True
                 self.openFlag = False
-            elif data[i] < a[i] and self.sellFlag == True:
+
+            # elif data[i] < a[i] and self.sellFlag == True:
+            elif flag == -1 and self.sellFlag == True:
                 print('平仓 -- 价格{}'.format(data[i]))
                 print('时间挫{}'.format(today))
                 # TODO 做交易 下单
@@ -91,17 +118,30 @@ class Account(object):
                 for k in self.symbol:
                     self.order_sell(k, 1, price=data[i], date_time=today, type='market')
                     self.every_handle_SellBalance(i, 1, price=data[i])
+
+                self.csv_openPrice_list.append('')
+                self.csv_closePrice_list.append(data[i])
+                self.csv_dataPrice_list.append(data[i])
+
                 self.openFlag = True
                 self.sellFlag = False
             else:
                 self.every_handle_Balance(date_time=today)
+                self.csv_openPrice_list.append('')
+                self.csv_closePrice_list.append('')
+                self.csv_dataPrice_list.append(data[i])
+
                 pass
             print('当前余额{}'.format(self.balance))
+            self.csv_balance_list.append(self.balance)
+            self.csv_time_list.append(today)
+
         self.every_balance.append(self.balance)
         print('balance 列表', self.every_balance)
         self.free_cash_list.append(self.free_cash)
         self.used_cash_list.append(self.used_cash)
         print(self.allowSell_symbol)
+
 
     # 信号 建仓
     def order_buy(self, symbol, amount, price, type, date_time):
@@ -162,11 +202,16 @@ class Account(object):
         # self.every_balance.append(self.balance)
         pass
 
+    # TODO 策略入口函数
+    def strategy(self, data):
+
+        pass
+
 
 if __name__ == '__main__':
-    Account().get_history('a', 'a', 'a', 'a')
-    l_data = [1.0, 2.0, 3.0, 4.0, 5.0]
-    a = talib.MA(np.array(l_data), timeperiod=5)
+    # Account().get_history('a', 'a', 'a', 'a')
+    # l_data = [1.0, 2.0, 3.0, 4.0, 5.0]
+    # a = talib.MA(np.array(l_data), timeperiod=5)
     Account().handle_data()
 
 
