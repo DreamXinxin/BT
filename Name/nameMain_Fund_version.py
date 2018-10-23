@@ -4,12 +4,12 @@ __author__ = 'xin'
 此文件总回测文件api  类名称 可以自己命名 方便以后打包成自己的产品
 """
 import datetime
-from BackTest_v1.Account.accountMain import Account
+from BackTest_v1.Account.accountMain_Fund_version import Account
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 # from matplotlib.pyplot import ion
-from BackTest_v1.Data.dataMain import HistoryData
+from BackTest_v1.Data.dataMain_Fund_version import HistoryData
 import os
 import threading
 import time
@@ -19,7 +19,7 @@ class OurName(object):
     def __init__(self):
         pass
 
-    def backtest(self, start, end, symbol=None, capital_base=None, price_type='close',freq=None, commission=None,  slippage=None, initialize=None, handle_data=None, refresh_rate=1):
+    def backtest(self, start, end, symbol_list=None, capital_base=None, price_type='close',freq=None, commission=None,  slippage=None, initialize=None, handle_data=None, refresh_rate=1):
         """
         主要回测函数
 
@@ -35,7 +35,7 @@ class OurName(object):
         :param refresh_rate:                  调仓间隔
         :return:                              回测报告（pandas.DataFrame） 回测数据（Account）
         """
-        print('ss')
+
         ################################# 计算开始到结束的交易日日期 ##################################
         date_list = []
         begin_date = datetime.datetime.strptime(start, "%Y-%m-%d")
@@ -45,22 +45,27 @@ class OurName(object):
             date_list.append(date_str)
             begin_date += datetime.timedelta(days=1)
         ###############################################################################################
+
         account = Account()
         handle_data = account.handle_data
         account.back_test_date = date_list
         # data = [float(x) for x in range(0, 21)]
         # data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 1.0]
-        data = HistoryData().get_history_data(start=start, end=end, type=price_type, freq='5T')
-        # print('最终获取的数据', data)
+        data_dict = {}
+        for symbol in symbol_list:
+            data_dict[symbol] = HistoryData().get_history_data(symbol=symbol, start=start, end=end, type=price_type, freq='5T')
+        print('最终获取的数据', data_dict)
         # print('停止程序')
         # exit()
+
         for i in range(len(date_list)):
             print('开始回测日期是{}>>>>'.format(date_list[i]))
-            # 获取当天之前的数据
-            new_data = self.get_before_today_data(start=start, end=date_list[i], data=data)
-
+            # 获取当天之前的数据 字典 key: symbol  value: 对应货币对的 数据
+            new_data_dict = self.get_before_today_data(start=start, end=date_list[i], data=data_dict, symbol_list=symbol_list)
+            # print('new_data_dict',new_data_dict)
+            # exit()
             # 每日处理数据 传入当天日期
-            handle_data(new_data, today=date_list[i], price_type=price_type)
+            handle_data(new_data_dict, today=date_list[i], price_type=price_type)
 
         # 计算每日净值
         print('nameMain--{}'.format(account.allowSell_symbol))
@@ -69,14 +74,16 @@ class OurName(object):
         self.report(account)
 
     # 获取当天之前的交易日日期
-    def get_before_today_data(self, start, end, data):
+    def get_before_today_data(self, start, end, data, symbol_list):
         end_day = datetime.datetime.strptime(end, "%Y-%m-%d")
         print(end_day)
         tomorrow = end_day + datetime.timedelta(days=1)
-        print('当天日期获取的数据:', data[data.index <= tomorrow])
-        # new_data = data[0:end]
-        # print('获取当天日期之前的数据：', new_data)
-        return data[data.index <= tomorrow]
+
+        info_data = {}
+        for symbol in symbol_list:
+            print('当天日期获取的数据:', data[symbol][data[symbol].index <= tomorrow])
+            info_data[symbol] = data[symbol][data[symbol].index <= tomorrow]
+        return info_data
 
     # 输出csv文件
     def outputData(self, account, star, end):
@@ -130,7 +137,21 @@ class OurName(object):
 
 
 if __name__ == '__main__':
-    OurName().backtest('2017-07-01', '2017-07-02', price_type='close')
+    #############################  需要手动填写  #######################
+    init_dict = {
+        'BTC': 10,
+        'USD': 10000,
+        'ETH': 5000,
+    }
+    # 需要获取的多币种的历史数据
+    symbols_history_data = ['BTCUSD', 'ETHBTC', 'ETHUSD']
+
+    # 历史回测
+    OurName().backtest(start='2017-07-01',
+                       end='2017-07-03',
+                       symbol_list=symbols_history_data,
+                       price_type='close'
+                       )
 
 
 

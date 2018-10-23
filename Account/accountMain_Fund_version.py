@@ -4,12 +4,12 @@ __author__ = 'xin'
 """
 此文件是创建虚拟账户 
 """
-from BackTest_v1.Data.dataMain import HistoryData
+from BackTest_v1.Data.dataMain_Fund_version import HistoryData
 import talib
 import numpy as np
 from collections import OrderedDict
 import datetime
-from BackTest_v1.Strategy.strategy1 import Demo
+from BackTest_v1.Strategy.strategy1_Fund_version import Demo
 
 
 class Order(object):
@@ -70,8 +70,11 @@ class Account(object):
         return HistoryData().get_history_data()
 
     # 处理数据
-    def handle_data(self, data=None, today=None, price_type=None):
+    def handle_data(self, data_dict=None, today=None, price_type=None):
         # data = [float(x) for x in range(20)]
+        # 获取时间长度搓 取数据字典中 第一个key 作为 后边遍历的标准
+        data = data_dict[list(data_dict.keys())[0]]
+
         print('处理数据为:', data.columns[-1])
         real_data = data
         data = data[data.columns[-1]]
@@ -85,12 +88,14 @@ class Account(object):
             info_d = {}
             info_d['datetime'] = today
             info_d['price'] = price
-            info_d['data'] = data
+            info_d['data_dict'] = data_dict
             info_d['dataLen'] = i                  # 记入数据长度
 
             # 获取开平仓信号
-            flag = Demo().run(info_d)
+            flag = Demo().run(info_d)  # TODO 返回的数据 变成字典格式
             # if data[i] > a[i] and self.openFlag == True:
+
+            # TODO  需要更改
             if flag == 1 and self.openFlag == True:
                 print('建仓 -- 价格{}'.format(data[i]))
                 # TODO 做交易 下单
@@ -98,6 +103,7 @@ class Account(object):
                 print('时间挫{}'.format(today))
                 for j in self.symbol:
                     self.order_buy(j, 1, price=data[i], date_time=today, type='market')
+                    # TODO  每日计算净值 改成 字典类型
                     self.every_handle_BuyBalance(i, 1, price=data[i])
                 #######################
 
