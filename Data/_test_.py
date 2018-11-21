@@ -10,6 +10,7 @@ import shutil
 import re
 import datetime
 import zipfile
+import matplotlib.pyplot as plt
 
 # file = 'BITFINEX_BTCUSD_2017-07-01_2017-09-30_1H.csv'
 # data = pd.read_csv(file)
@@ -53,18 +54,18 @@ old_data = 'E:\\BackTest\\BackTest_v1\\Data\\historyData\\'
                 # print(path)
 #
 #
-for dirpath, dirnames, filenames in os.walk(old_data):
-    for filepath in filenames:
-        if 'ETHUSD' in str(filepath) and '1T' in str(filepath):
-            path = os.path.join(dirpath, filepath)
-            fileName = re.findall(r'ETHUSD\\(.*)?', path)[0]
-            # fileName = path.split('\\')[-1]
-            isExists = os.path.exists('E:\\BackTest\\BackTest_v1\\Data\\ETHUSD\\{}'.format(fileName))
-            if not isExists:
-                shutil.copy(path, 'E:\\BackTest\\BackTest_v1\\Data\\ETHUSD\\{}'.format(fileName))
-                print(fileName)
-            else:
-                print('存在该文件')
+# for dirpath, dirnames, filenames in os.walk(old_data):
+#     for filepath in filenames:
+#         if 'ETHUSD' in str(filepath) and '1T' in str(filepath):
+#             path = os.path.join(dirpath, filepath)
+#             fileName = re.findall(r'ETHUSD\\(.*)?', path)[0]
+#             fileName = path.split('\\')[-1]
+            # isExists = os.path.exists('E:\\BackTest\\BackTest_v1\\Data\\ETHUSD\\{}'.format(fileName))
+            # if not isExists:
+            #     shutil.copy(path, 'E:\\BackTest\\BackTest_v1\\Data\\ETHUSD\\{}'.format(fileName))
+            #     print(fileName)
+            # else:
+            #     print('存在该文件')
 #
 
 #####################  数据整合 ###############################
@@ -193,4 +194,17 @@ print()
 #         w_path = file_path + '{}\\{}\\{}'.format(i, t, pp)
 #         print(w_path)
 #         result.to_csv(w_path)
+# import matplotlib.dates as mdate
+# _f = '/Users/billy/PycharmProjects/BackTest/BackTest_v1/outputData/2017-07-01_2017-07-02_balance_2.csv'
+# data = pd.read_csv(_f)
+# print(data)
+# fig = plt.figure()
+# ax = fig.add_subplot(111)
+# # data['time'] = pd.to_datetime(data['time'])
+# # ax.xaxis.set_major_formatter(mdate.DateFormatter('%Y-%m-%d %H:%M:%S'))
+# plt.plot(data.index, data['data_price'])
+# # print(pd.date_range(data.index[0],data.index[-1]))
+# # plt.xticks(pd.date_range(data.index[0],data.index[-1]),rotation=45)
+#
+# plt.show()
 

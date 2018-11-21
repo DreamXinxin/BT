@@ -1,4 +1,5 @@
 # -*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 __author__ = 'xin'
 
 """
@@ -25,8 +26,9 @@ class Order(object):
 
 class Account(object):
     # 初始化设置
-    def __init__(self):
-        self.symbol = ['BTC/USDT']                             # symbol list
+    def __init__(self, arg):
+        self.arg = arg
+        self.symbol = symbol_history_list                          # symbol list
         self.cash = 10000                            # 初始金额
         self.balance = 10000                         # 账户余额
         self.free_cash = 10000                      # 可使用资金
@@ -51,6 +53,7 @@ class Account(object):
         self.csv_closePrice_list = []
         self.csv_dataPrice_list = []
 
+        self.zhibiao = None
 
 
         pass
@@ -70,17 +73,20 @@ class Account(object):
         return HistoryData().get_history_data()
 
     # 处理数据
-    def handle_data(self, data=None, today=None, price_type=None):
-        # data = [float(x) for x in range(20)]
+    def handle_data(self, data_dict=None, today=None, price_type=None):
+        data = data_dict[list(data_dict.keys())[0]]
         print('处理数据为:', data.columns[-1])
         real_data = data
         data = data[data.columns[-1]]
+        demo = Demo(self.arg)
 
-        # a = talib.MA(np.array(data), timeperiod=10)
         for i in range(len(data)):
             # print('data[i], a[i]', data[i], a[i])
             today = real_data.index[i]
-            price = data[i]
+            try:
+                price = data[i + 1]
+            except:
+                price = np.nan
 
             info_d = {}
             info_d['datetime'] = today
@@ -89,43 +95,43 @@ class Account(object):
             info_d['dataLen'] = i                  # 记入数据长度
 
             # 获取开平仓信号
-            flag = Demo().run(info_d)
+            info = demo.run(info_d)
             # if data[i] > a[i] and self.openFlag == True:
-            if flag == 1 and self.openFlag == True:
-                print('建仓 -- 价格{}'.format(data[i]))
+            if info['status'] == 'open':
+                print('建仓 -- 价格{}--方向{}'.format(data[i], info['side']))
                 # TODO 做交易 下单
                 # XXXXXXXXXX
                 print('时间挫{}'.format(today))
+                print('allowSell_symbol:', self.allowSell_symbol)
                 for j in self.symbol:
-                    self.order_buy(j, 1, price=data[i], date_time=today, type='market')
+                    self.order_buy(j, 1, price=data[i], date_time=today, type='market', side=info['side'])
                     self.every_handle_BuyBalance(i, 1, price=data[i])
+
                 #######################
                 self.csv_openPrice_list.append(data[i])
                 self.csv_closePrice_list.append('')
                 self.csv_dataPrice_list.append(data[i])
 
 
-                self.sellFlag = True
-                self.openFlag = False
-
             # elif data[i] < a[i] and self.sellFlag == True:
-            elif flag == -1 and self.sellFlag == True:
-                print('平仓 -- 价格{}'.format(data[i]))
+            elif info['status'] == 'close' :
+                print('平仓 -- 价格{}--方向{}'.format(data[i], info['side']))
                 print('时间挫{}'.format(today))
+                print('allowSell_symbol:', self.allowSell_symbol)
                 # TODO 做交易 下单
                 # XXXXXXXXXX
                 for k in self.symbol:
-                    self.order_sell(k, 1, price=data[i], date_time=today, type='market')
+                    self.order_sell(k, 1, price=data[i], date_time=today, type='market', side=info['side'])
                     self.every_handle_SellBalance(i, 1, price=data[i])
 
                 self.csv_openPrice_list.append('')
                 self.csv_closePrice_list.append(data[i])
                 self.csv_dataPrice_list.append(data[i])
 
-                self.openFlag = True
-                self.sellFlag = False
             else:
-                self.every_handle_Balance(date_time=today)
+                print('不开仓--时间挫{}--当前价格{}'.format(today, price))
+                print('allowSell_symbol:', self.allowSell_symbol)
+                # self.every_handle_Balance(price=price)
                 self.csv_openPrice_list.append('')
                 self.csv_closePrice_list.append('')
                 self.csv_dataPrice_list.append(data[i])
@@ -140,10 +146,11 @@ class Account(object):
         self.free_cash_list.append(self.free_cash)
         self.used_cash_list.append(self.used_cash)
         print(self.allowSell_symbol)
+        self.MA = demo.MA
 
 
     # 信号 建仓
-    def order_buy(self, symbol, amount, price, type, date_time):
+    def order_buy(self, symbol, amount, price, type, date_time, side):
         print('建仓交易')
         self.Order(symbol, amount, price)
         order_info = {}
@@ -151,12 +158,13 @@ class Account(object):
         order_info['amount'] = amount
         order_info['price'] = price
         order_info['type'] = type
+        order_info['side'] = side
         self.allowSell_symbol[str(date_time)] = order_info
         self.trade_date.append(date_time)
         pass
 
     # 信号 平仓
-    def order_sell(self, symbol, amount, price, type, date_time):
+    def order_sell(self, symbol, amount, price, type, date_time,side):
         print('平仓交易')
         self.Order(symbol, amount, price)
         self.trade_date.append(date_time)
@@ -181,24 +189,39 @@ class Account(object):
     def every_handle_SellBalance(self, symbol, amount, price):
         # self.cash = self.cash - float(amount * price)
         print('allowSell_symbol:', self.allowSell_symbol)
+        l = []
         for i in self.allowSell_symbol:
             self.used_cash -= float(self.allowSell_symbol[i]['price'])
             cash = float(self.allowSell_symbol[i]['amount']) * float(self.allowSell_symbol[i]['price'])*(1 - self.close_fee)
             print('扣除平仓手续后，退还金额:{}'.format(cash))
             # 利润计算
-            profit = (float(price) - float(self.allowSell_symbol[i]['price'])) * float(self.allowSell_symbol[i]['amount'])
+            if self.allowSell_symbol[i]['side'] == 'buy':
+                profit = (float(price) - float(self.allowSell_symbol[i]['price'])) * float(self.allowSell_symbol[i]['amount'])
+            else:
+                profit = -1 * (float(price) - float(self.allowSell_symbol[i]['price'])) * float(self.allowSell_symbol[i]['amount'])
+
             print('获得利润为{}'.format(profit))
             self.balance += profit
             self.free_cash = self.balance - self.used_cash
 
-            del self.allowSell_symbol[i]
+            l.append(i)
+        for j in l:
+            del self.allowSell_symbol[j]
 
         print('退还后的总余额：{}'.format(self.balance))
         # self.every_balance.append(self.balance)
 
     # 不下单子时处理 余额
-    def every_handle_Balance(self, date_time):
+    def every_handle_Balance(self, price):
         # self.every_balance.append(self.balance)
+        for i in self.allowSell_symbol:
+            if self.allowSell_symbol[i]['side'] == 'buy':
+                profit = (float(price) - float(self.allowSell_symbol[i]['price'])) * float(self.allowSell_symbol[i]['amount'])
+            else:
+                profit = -1 * (float(price) - float(self.allowSell_symbol[i]['price'])) * float(self.allowSell_symbol[i]['amount'])
+
+            self.balance += profit
+            print('持仓中余额', self.balance)
         pass
 
     # TODO 策略入口函数

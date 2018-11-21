@@ -1,4 +1,6 @@
 # -*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
+# -*- coding:utf-8 -*-
 __author__ = 'xin'
 
 """
@@ -9,7 +11,7 @@ import talib
 import numpy as np
 from collections import OrderedDict
 import datetime
-from Strategy.strategy1_Fund_version import Demo
+from Strategy.strategy1_Fund_version_v2 import Demo
 import copy
 from Setting.setting import start_date, end_date, init_dict, symbol_history_list, STRATEGY_NAME
 
@@ -42,7 +44,9 @@ class Account(object):
         self.back_test_date = []                     # 回测日期
         self.every_balance = []                      # 每日净值
         self.openFlag = True                         # 是否可以开仓标记
-        self.sellFlag = False                        # 是否可以平仓
+        self.closeFlag = False                        # 是否可以平仓
+        self.limit_openFlag = True
+        self.limit_closeFlag = False
         self.Order = Order                          # 下单模块
         self.blotter = []                            # 下单列表
 
@@ -51,16 +55,13 @@ class Account(object):
 
         self.csv_time_list = []
         self.csv_balance_list = []
-        self.csv_openPrice_dict = {}
-        self.csv_closePrice_dict = {}
-        self.csv_dataPrice_dict = {}
+        self.csv_openPrice_dict = OrderedDict()                   # 记录建仓价格
+        self.csv_closePrice_dict = OrderedDict()                 # 记录平仓价格
+        self.csv_dataPrice_dict = OrderedDict()                 # 记录货币价格
 
         for i in init_dict:
             self.used_cash[i] = 0.0               # 初始化
-        for i in symbol_history_list:
-            self.csv_openPrice_dict[i] = []
-            self.csv_closePrice_dict[i] = []
-            self.csv_dataPrice_dict[i] = []
+
 
         pass
 
@@ -95,7 +96,10 @@ class Account(object):
         for i in range(len(data)):
             # print('data[i], a[i]', data[i], a[i])
             today = real_data.index[i]
-            price = data[i]
+            try:
+                price = data[i + 1]
+            except:
+                price = np.nan
 
             info_d = {}
             info_d['datetime'] = today
@@ -104,99 +108,51 @@ class Account(object):
             info_d['dataLen'] = i                  # 记入数据长度
 
             # 获取开平仓信号
-            flag, info_list = demo.run(info_d)  # TODO 返回的数据 变成字典格式
+            info_dict = demo.run(info_d)
             # if data[i] > a[i] and self.openFlag == True:
             print('\n时间挫{} \n'.format(today))
-            # TODO  需要更改 区分限价单和市价单 两种处理方式
-            if flag == 1 and self.openFlag == True:
-                # TODO 做交易 下单
-                # XXXXXXXXXX
 
-                for open_dict in info_list:
-                    balance_coin = open_dict['balance_coin']
-                    price = open_dict['price']
-                    _type = open_dict['type']
-                    symbol = open_dict['symbol']
-                    if _type == 'limit':
-                        demo.limit_order_list.append(open_dict)
-                        # 限价处理方法
-                        print('limit')
-                    else:
-                        # 市价处理方法
-                        print('market')
-                        for j in symbol_history_list:
-                            j_price = data_dict[j].values[i][0]
-                            if symbol == j:
-                                self.csv_openPrice_dict[symbol].append(price)
-                                self.csv_closePrice_dict[symbol].append('')
-                                self.csv_dataPrice_dict[symbol].append(price)
-                            else:
-                                self.csv_openPrice_dict[j].append('')
-                                self.csv_closePrice_dict[j].append('')
-                                self.csv_dataPrice_dict[j].append(j_price)
+            # 判断是否有删除的挂单
+            for d_index in range(len(demo.limit_order_list)):
+                if demo.limit_order_list[d_index]['id'] == info_dict['delLimit']:
+                    del demo.limit_order_list[d_index]
 
-                        self.order_open(open_dict)
-
-                    self.every_handle_OpenBalance(open_dict)
-                #######################
-
-                self.sellFlag = True
-                self.openFlag = False
-
-
-            # elif data[i] < a[i] and self.sellFlag == True:
-            elif flag == -1 and self.sellFlag == True:
-                print('平仓 -- 价格{}'.format(data[i]))
-
-                # TODO 做交易 下单
-                # XXXXXXXXXX
-
-                for close_dict in info_list:
-                    balance_coin = close_dict['balance_coin']
-                    price = close_dict['price']
-                    _type = close_dict['type']
-                    symbol = close_dict['symbol']
-                    for j in symbol_history_list:
-                        j_price = data_dict[j].values[i][0]
-                        if j == symbol:
-                            self.csv_openPrice_dict[symbol].append('')
-                            self.csv_closePrice_dict[symbol].append(price)
-                            self.csv_dataPrice_dict[symbol].append(price)
-                        else:
-                            self.csv_openPrice_dict[j].append('')
-                            self.csv_closePrice_dict[j].append('')
-                            self.csv_dataPrice_dict[j].append(j_price)
-
-                    self.order_close(close_dict)
-                    self.every_handle_CloseBalance(close_dict)
-
-
-                self.openFlag = True
-                self.sellFlag = False
-            else:
-                self.every_handle_Balance(date_time=today)
-                for symbol in symbol_history_list:
-                    j_price = data_dict[symbol].values[i][0]
-                    self.csv_openPrice_dict[symbol].append('')
-                    self.csv_closePrice_dict[symbol].append('')
-                    self.csv_dataPrice_dict[symbol].append(j_price)
-
-            # 处理 挂单
-            for lim_dict in demo.limit_order_list:
-                if lim_dict['side'] == 'buy' and price <= lim_dict['price']:
-                    # TODO 做交易 开仓  净值计算
-                    pass
-                elif lim_dict['side'] == 'sell' and price >= lim_dict['price']:
-                    # TODO 做交易 开仓  净值计算
-                    pass
-                elif lim_dict['side'] == 'buy' and price <= lim_dict['close_price']:
-                    # TODO 做交易 平仓  净值计算
-                    pass
-                elif lim_dict['side'] == 'sell' and price >= lim_dict['close_price']:
-                    # TODO 做交易 平仓  净值计算
-                    pass
+            for _index in range(len(demo.limit_order_list)):
+                if demo.limit_order_list[_index]['openPrice'] < price and demo.limit_order_list[_index]['side'] == 'buy':
+                    self.order_open(demo.limit_order_list[_index])
+                    self.csv_openPrice_dict[demo.limit_order_list[_index]['datetime']] = demo.limit_order_list[_index]['openPrice']
                 else:
-                    pass
+                    self.csv_openPrice_dict[demo.limit_order_list[_index]['datetime']] = ''
+
+                if demo.limit_order_list[_index]['closePrice'] > price and demo.limit_order_list[_index]['side'] == 'sell':
+                    self.csv_closePrice_dict[demo.limit_order_list[_index]['datetime']] = demo.limit_order_list[_index]['closePrice']
+                    self.order_close(demo.limit_order_list[_index])
+                else:
+                    self.csv_closePrice_dict[demo.limit_order_list[_index]['datetime']] = ''
+
+            # 遍历需要交易池
+            # 如果是 市价单
+            for market_open_order in demo.market_open_order_list:
+                if self.openFlag == True:
+                    self.order_open(market_open_order)
+                    self.csv_openPrice_dict[market_open_order['datetime']] = price
+                    self.closeFlag = True
+                    self.openFlag = False
+                else:
+                    self.csv_openPrice_dict[market_open_order['datetime']] = ''
+
+            for market_close_order in demo.market_close_order_list:
+                if self.closeFlag == True:
+                    self.order_close(market_close_order)
+                    self.csv_closePrice_dict[market_close_order['datetime']] = price
+                    self.openFlag = True
+                    self.closeFlag = False
+                else:
+                    self.csv_closePrice_dict[market_close_order['datetime']] = ''
+
+            for _k in data_dict.keys():
+                self.csv_dataPrice_dict[_k] = data_dict[_k]
+
 
             l_balance = {}
             l_balance = copy.deepcopy(self.balance)
@@ -220,12 +176,13 @@ class Account(object):
         order_info = {}
         order_info['symbol'] = info_dict['symbol']
         order_info['amount'] = info_dict['amount']
-        order_info['price'] = info_dict['price']
+        order_info['price'] = info_dict['openPrice']
         order_info['type'] = info_dict['type']
         order_info['datetime'] = info_dict['datetime']
 
         self.allowClose_symbol[info_dict['id']] = order_info
         self.trade_date.append(order_info['datetime'])
+        self.every_handle_OpenBalance(info_dict)
         pass
 
     # 信号 平仓
@@ -234,11 +191,12 @@ class Account(object):
         order_info = {}
         order_info['symbol'] = info_dict['symbol']
         order_info['amount'] = info_dict['amount']
-        order_info['price'] = info_dict['price']
+        order_info['price'] = info_dict['closePrice']
         order_info['type'] = info_dict['type']
         order_info['datetime'] = info_dict['datetime']
         # self.Order(symbol, amount, price)
         self.trade_date.append(order_info['datetime'])
+        self.every_handle_CloseBalance(info_dict)
 
         pass
 
@@ -248,7 +206,7 @@ class Account(object):
         amount = float(info_dict['amount'])
         order_amount = price * amount             # 需要下单的手数
 
-        balance_coin = info_dict['balance_coin']
+        balance_coin = info_dict['balanceCoin']
 
         if self.free_cash[balance_coin] <= order_amount:
             print('金额不足无法交易, 当前可用金额为{}， 需要交易金额{}'.format(self.free_cash[balance_coin], order_amount))
@@ -271,9 +229,6 @@ class Account(object):
 
         balance_coin = info_dict['balance_coin']
 
-
-        # TODO 明天需要改的地方
-
         for id in list(self.allowClose_symbol.keys()):
             self.used_cash[balance_coin] -= float(self.allowClose_symbol[id]['price'])
             cash = float(self.allowClose_symbol[id]['amount']) * float(self.allowClose_symbol[id]['price'])*(1 - self.close_fee)
@@ -294,17 +249,13 @@ class Account(object):
         # self.every_balance.append(self.balance)
         pass
 
-    # TODO 策略入口函数
-    def strategy(self, data):
-
-        pass
 
 
 if __name__ == '__main__':
     # Account().get_history('a', 'a', 'a', 'a')
     # l_data = [1.0, 2.0, 3.0, 4.0, 5.0]
     # a = talib.MA(np.array(l_data), timeperiod=5)
-    Account().handle_data()
+    Account(init_dict).handle_data()
 
 
 

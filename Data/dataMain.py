@@ -8,8 +8,14 @@ import pandas as pd
 import os
 import datetime
 import re
+import pymongo
+import time
+import pytz
+from dateutil import parser
+import numpy as np
 
-class HistoryData(object):
+
+class HistoryCSVData(object):
     def __init__(self):
         pass
 
@@ -28,7 +34,7 @@ class HistoryData(object):
         """
         # TODO 对应相关时间数据
 
-        data = self.findData(start, end)
+        data = self.findData(start, end, symbol)
         print(data)
         # f = open('E:\\BackTest\\BackTest_v1\\Data\\BITFINEX_BTCUSD_20170101_1T.csv')
         # data = pd.read_csv(f, index_col=0)
@@ -47,15 +53,13 @@ class HistoryData(object):
         else:
             print('没有对应的时间段数据')
 
-        symbol = 'BTC_USDT'
-        history_data = dict()
-
-        ohlc_dict = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
-        data.index = pd.to_datetime(data.index)
-        new_data = data.resample('15T', closed='right', label='right').agg(ohlc_dict)
 
 
-        return new_data
+        # ohlc_dict = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'}
+        # data.index = pd.to_datetime(data.index)
+        # new_data = data.resample(freq, closed='right', label='right').agg(ohlc_dict)
+
+        # return new_data
 
     def get_5T(self, data, ohlc_dict, type):
         new_data = data.resample('5T', closed='right', label='right').agg(ohlc_dict)
@@ -63,7 +67,7 @@ class HistoryData(object):
         if type == 'close':
             # new_data_list = new_data['close'].tolist()
             # print(new_data_list)
-            return new_data[['close']]
+            return new_data[['close', 'volume']]
         elif type == 'open':
             # new_data_list = new_data['open'].tolist()
             # print(new_data_list)
@@ -150,9 +154,9 @@ class HistoryData(object):
             begin_date += datetime.timedelta(days=1)
         return date_list
 
-    def findData(self, start, end):
+    def findData(self, start, end, symbol):
         date_list = self.getEveryDay(start, end)
-        file_path = '/Users/billy/PycharmProjects/BackTest/BackTest_v1/Data/BTCUSD'
+        file_path = '/Users/billy/PycharmProjects/BackTest/BackTest_v1/Data/{}'.format(symbol)
         file_list = []
         for i in os.listdir(file_path):
             for j in date_list:
@@ -175,11 +179,146 @@ class HistoryData(object):
         return result
 
 
+class HistoryDBData(object):
+    def __init__(self):
+        self.client = pymongo.MongoClient(host='localhost', port=27017)
+        self.db = self.client['kline']['BN_BTC_USDT_1h']
+
+    def closeDB(self):
+        self.client.close()
+
+    def get_start_end(self, start, end):
+        start_str = datetime.datetime.strptime(start, '%Y-%m-%d')
+        start = start_str - datetime.timedelta(hours=8)
+        start = datetime.datetime.strftime(start, '%Y-%m-%d %H:%M:%S')
+        end_str = datetime.datetime.strptime(end, '%Y-%m-%d')
+        end = end_str - datetime.timedelta(hours=8)
+        end = datetime.datetime.strftime(end, '%Y-%m-%d %H:%M:%S')
+        start = re.sub(' ', '{}', start)
+        start = start.format('T') + 'Z'
+        end = re.sub(' ', '{}', end)
+        end = end.format('T') + 'Z'
+        return start, end
+
+    def get_history_data(self, symbol=None, start=None, end=None, type='close', freq=None):
+        # 先将日期减去8小时
+        start, end = self.get_start_end(start, end)
+
+        queryArgs = {"$and":[{"Time":{"$gt":start}},{"Time":{"$lt":end}}]}
+        # TODO 根据symbol修改数据表名 等待数据接收完整
+        # db = self.client['kline']['{}'.format(symbol)]   # symbol 在做处理
+        data = self.db.find(queryArgs)
+
+        df = pd.DataFrame(list(data))
+        df = df.drop_duplicates(['Time'])
+        del df['_id']
+        for utc_str in df['Time']:
+            local_time = self.utc_to_local(utc_str)
+            df['Time'].replace(utc_str, local_time, inplace=True)
+
+        data = df[['Open', 'Close', 'High', 'Low', 'QuoteAssetVolume', 'QuoteVolume', 'Time']].set_index('Time')
+        print(data)
+        # exit()
+        ohlc_dict = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'QuoteVolume': 'sum', 'QuoteAssetVolume':'sum'}
+        data.index = pd.to_datetime(data.index)
+        if freq == '5T':
+            return self.get_5T(data, ohlc_dict, type)
+        elif freq == '15T':
+            return self.get_15T(data, ohlc_dict, type)
+        elif freq == '30T':
+            return self.get_30T(data, ohlc_dict, type)
+        elif freq == '1H':
+            return self.get_1H(data, ohlc_dict, type)
+        elif freq == '4H':
+            return self.get_4H(data, ohlc_dict, type)
+        else:
+            print('没有对应的时间段数据')
+
+    def get_5T(self, data, ohlc_dict, type):
+        new_data = data.resample('5T', closed='right', label='right').agg(ohlc_dict)
+        print(new_data)
+        if type == 'Close':
+            return new_data[['Close', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'Open':
+            return new_data[['Open', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'High':
+            return new_data[['High', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'Low':
+            return new_data[['Low', 'QuoteAssetVolume', 'QuoteVolume']]
+        else:
+            raise TypeError('无 数据')
+
+    def get_15T(self, data, ohlc_dict, type):
+        new_data = data.resample('15T', closed='right', label='right').agg(ohlc_dict)
+        print(new_data)
+        if type == 'Close':
+            return new_data[['Close', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'Open':
+            return new_data[['Open', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'High':
+            return new_data[['High', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'Low':
+            return new_data[['Low', 'QuoteAssetVolume', 'QuoteVolume']]
+        else:
+            raise TypeError('无 数据')
+        pass
+
+    def get_30T(self, data, ohlc_dict, type):
+        new_data = data.resample('30T', closed='right', label='right').agg(ohlc_dict)
+        print(new_data)
+        if type == 'Close':
+            return new_data[['Close', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'Open':
+            return new_data[['Open', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'High':
+            return new_data[['High', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'Low':
+            return new_data[['Low', 'QuoteAssetVolume', 'QuoteVolume']]
+        else:
+            raise TypeError('无 数据')
+
+    def get_1H(self, data, ohlc_dict, type):
+        new_data = data.resample('1H', closed='right', label='right').agg(ohlc_dict)
+        print(new_data)
+        if type == 'Close':
+            return new_data[['Close', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'Open':
+            return new_data[['Open', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'High':
+            return new_data[['High', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'Low':
+            return new_data[['Low', 'QuoteAssetVolume', 'QuoteVolume']]
+        else:
+            raise TypeError('无 数据')
+
+    def get_4H(self, data, ohlc_dict, type):
+        data[['QuoteAssetVolume', 'QuoteVolume']] = data[['QuoteAssetVolume', 'QuoteVolume']].astype(float)
+        new_data = data.resample('4H', closed='right', label='right').agg(ohlc_dict)
+        print(new_data)
+        if type == 'Close':
+            return new_data[['Close', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'Open':
+            return new_data[['Open', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'High':
+            return new_data[['High', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'Low':
+            return new_data[['Low', 'QuoteAssetVolume', 'QuoteVolume']]
+        else:
+            raise TypeError('无 数据')
+
+    def utc_to_local(self, utc_time_str, utc_format='%Y-%m-%d %H:%M:%S'):
+        utc_datetime = parser.parse(utc_time_str)
+        utc_datetime += datetime.timedelta(hours=8)
+        local_time = utc_datetime.strftime(utc_format)
+        return local_time
+
+
 if __name__ == '__main__':
-    data = HistoryData().get_history_data(start='2017-01-02', end='2017-01-03', freq='5T',type='open')
-
-    pass
-
+    # data = HistoryCSVData().get_history_data(start='2017-01-02', end='2017-01-03', freq='5T',type='open')
+    mongo = HistoryDBData()
+    data_df = mongo.get_history_data(start='2018-08-16', end='2018-08-17', type='Close', freq='4H')
+    print(data_df)
+    mongo.closeDB()
 
 
 

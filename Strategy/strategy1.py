@@ -5,62 +5,73 @@ import numpy as np
 
 
 class Demo(object):
-    def __init__(self):
+    def __init__(self, arg):
+        self.arg = arg
+        self.buyflag = 0
+        self.sellflag = 0
+
         pass
-
-    def main(self, data):
-        for i in range(len(data)):
-            symbol = 'BTCUSD'
-            price = data[i]
-            date_time = data.index[i]
-            ########策略逻辑#########
-            flag_1 = 0  # 满足 开仓信号
-            flag_2 = 1  # 满足 平仓信号
-            ########################
-            if flag_1 == 0:
-                info_dict = {}
-                info_dict['symbol'] = symbol
-                info_dict['price'] = price
-                info_dict['datetime'] = date_time
-                info_dict['vol'] = ''
-                info_dict['type'] = '_open'
-                return info_dict
-            elif flag_2 == 0:
-                info_dict = {}
-                info_dict['symbol'] = symbol
-                info_dict['price'] = price
-                info_dict['datetime'] = date_time
-                info_dict['vol'] = ''
-                info_dict['type'] = '_close'
-                return info_dict
-
-            else:
-                return {}
 
     def run(self, info_d):
         price = info_d['price']          # 当时时间点对应的价格
         date_time = info_d['datetime']   # 时间点
         dataLen = info_d['dataLen']      # 总数据中遍历到 哪部分的长度
-        data = info_d['data']            # 回测周期全部数据
-
+        data_dict = info_d['data']            # 回测周期全部数据
+        try:
+            data = data_dict[list(data_dict.keys())[0]]['close']
+        except:
+            try:
+                data = data_dict[list(data_dict.keys())[0]]['open']
+            except:
+                try:
+                    data = data_dict[list(data_dict.keys())[0]]['high']
+                except:
+                    data = data_dict[list(data_dict.keys())[0]]['low']
         ################################ 编写自己的交易策略 ##########################################
 
-
         # 使用的技术指标
-        MA = talib.MA(np.array(data), timeperiod=10)
+        MA = talib.MA(np.array(data), timeperiod=self.arg)
+        self.MA = MA
+        if data[dataLen] > MA[dataLen] and self.buyflag == 0 and self.sellflag == 0:
+            info = {}
+            info['price'] = price
+            info['side'] = 'buy'
+            info['status'] = 'open'
+            self.buyflag = 1
+            return info
+        elif data[dataLen] < MA[dataLen] and self.buyflag == 1:
+            info = {}
+            info['price'] = price
+            info['side'] = 'buy'
+            info['status'] = 'close'
+            self.buyflag = 0
+            return info
 
-        # 开仓信号  满足开仓信号 将flag 赋值为1 返回
-        if data[dataLen] > MA[dataLen]:                  # 条件语句作为策略开仓信号  自己可更改
-            flag = 1
-            return flag
-        # 平仓信号
-        elif data[dataLen] < MA[dataLen]:                # # 条件语句作为策略开仓信号  自己可更改
-            flag = -1
-            return flag
+        elif data[dataLen] < MA[dataLen] and self.sellflag == 0 and self.buyflag == 0:
+            info = {}
+            info['price'] = price
+            info['side'] = 'sell'
+            info['status'] = 'open'
+            self.sellflag = 1
+            return info
+        elif data[dataLen] > MA[dataLen] and self.sellflag == 1:
+            info = {}
+            info['price'] = price
+            info['side'] = 'sell'
+            info['status'] = 'close'
+            self.sellflag = 0
+            return info
+
         else:
-            flag = 0
-            return flag
+            info = {}
+            info['price'] = ''
+            info['side'] = ''
+            info['status'] = ''
+            self.flag = 0
+            return info
+
+
 
 
 if __name__ == '__main__':
-     Demo()
+     Demo(10)
