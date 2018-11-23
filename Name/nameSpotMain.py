@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from Data.dataMain import HistoryCSVData
+from Data.dataMain import HistoryCSVData, HistoryDBData
 import os
 from pprint import pprint
 import threading
@@ -21,11 +21,13 @@ import time
 
 
 class OurName(object):
-    def __init__(self):
+    def __init__(self, plt_flag, is_use_database):
         self.plt_flag = 0
+        self.is_use_database = is_use_database
         pass
 
-    def backtest(self, start, end, init_dict=None, plt_flag=1, arg=None,capital_base=None, price_type='close',freq=None, commission=None,  slippage=None, initialize=None, handle_data=None, refresh_rate=1):
+    def backtest(self, start, end, init_dict=None,
+                 arg=None,capital_base=None, price_type='close',freq=None, commission=None,  slippage=None, initialize=None, handle_data=None, refresh_rate=1):
         """
         主要回测函数
 
@@ -58,11 +60,15 @@ class OurName(object):
 
 
         data_dict = {}
-        for symbol in self.symbol_list:
-            data_dict[symbol] = HistoryCSVData().get_history_data(symbol=symbol, start=start, end=end, type=price_type,
+        if self.is_use_database:
+            for symbol in self.symbol_list:
+                data_dict[symbol] = HistoryDBData().get_history_data(symbol=symbol, start=start, end=end, type=price_type,
+                                                               freq=freq)
+        else:
+            for symbol in self.symbol_list:
+                data_dict[symbol] = HistoryCSVData().get_history_data(symbol=symbol, start=start, end=end, type=price_type,
                                                                freq=freq)
         print('最终获取的数据', data_dict)
-        exit()
 
         self.data_dict = data_dict
         # 每日处理数据 传入当天日期
@@ -74,7 +80,7 @@ class OurName(object):
         drawmax_draw_down = self.create_drawdowns(account)
 
         # self.outputData(account, start, end)
-        self.report(account)
+        # self.report(account)
 
         print('允许最小配仓量{}'.format(account.allow_min_coin_dict))
 
@@ -208,12 +214,13 @@ class OurName(object):
         return max_draw_down
 
 if __name__ == '__main__':
-    # 是否显示 开仓平仓 点位  1 or 0  1 是显示 0 是不显示
-    plt_flag = 1
-
+    # 是否显示 开仓平仓 点位  True or False  True 是显示 False 是不显示
+    plt_flag = True
+    # 是否使用数据库里的数据
+    is_use_database = True
     # 回测日期
-    start_date = '2017-07-01'
-    end_date = '2017-07-01'
+    start_date = '2017-07-16'
+    end_date = '2017-07-18'
     # 需要的回测货币历史数据
     symbol_list = ['BTCUSD',]
     # 账户初始化 相关信息 金额
@@ -237,18 +244,18 @@ if __name__ == '__main__':
     STEP = 5
 
     # 回测周期T
-    freq = '5T'
+    freq = '4H'
 
     info = {}
     for i in range( START, END, STEP):
-        r = OurName()
+        r = OurName(plt_flag=plt_flag, is_use_database=is_use_database)
         info[i] = r.backtest(start=start_date,
                              end=end_date,
                              price_type='close',
                              init_dict=init_dict,
                              freq=freq,
                              arg=i,
-                             plt_flag=plt_flag)
+                             )
         pprint(info)
 
 

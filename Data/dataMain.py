@@ -181,8 +181,24 @@ class HistoryCSVData(object):
 
 class HistoryDBData(object):
     def __init__(self):
-        self.client = pymongo.MongoClient(host='localhost', port=27017)
-        self.db = self.client['kline']['BN_BTC_USDT_1h']
+
+        # 远程连接部分
+        user = 'root'
+        pwd = 'Shixin2018$'
+        host = '47.75.243.109'
+        port = '27017'
+        db_name ='kline__'
+        # uri = "mongodb://%s:%s@%s" % (user, pwd, host + ":" + port + "/" + db_name)
+        # self.client = pymongo.MongoClient(uri)
+        # self.db = self.client['BN_BTC_USDT_1h']
+        host = '47.75.243.109'
+        self.client = pymongo.MongoClient(host)
+        # self.client.adb.authenticate(user, pwd, mechanism='SCRAM-SHA-1')
+        self.db = self.client[db_name]
+
+        # 本地连接
+        # self.client = pymongo.MongoClient(host='localhost', port=27017)
+        # self.db = self.client['kline']['BN_BTC_USDT_1h']
 
     def closeDB(self):
         self.client.close()
@@ -200,26 +216,36 @@ class HistoryDBData(object):
         end = end.format('T') + 'Z'
         return start, end
 
-    def get_history_data(self, symbol=None, start=None, end=None, type='close', freq=None):
+    def get_history_data(self, symbol='BTCUSDT', start=None, end=None, type='close', freq=None):
         # 先将日期减去8小时
         start, end = self.get_start_end(start, end)
 
         queryArgs = {"$and":[{"Time":{"$gt":start}},{"Time":{"$lt":end}}]}
-        # TODO 根据symbol修改数据表名 等待数据接收完整
-        # db = self.client['kline']['{}'.format(symbol)]   # symbol 在做处理
-        data = self.db.find(queryArgs)
+
+        if symbol in ['BTCUSD','EOSBTC', 'EOSETH', 'EOSUSD','ETCBTC', 'ETCUSD', 'ETHBTC', 'ETHUSD',
+                        'LTCBTC','LTCUSD']:
+            db = self.db['BF_' + symbol[:3] + '_' + symbol[-3:] + '.BF_1m']
+        else:
+            err = '目前该交易所没有该{}货币对数据'.format(symbol)
+            raise TypeError(err)
+
+        data = db.find(queryArgs)
 
         df = pd.DataFrame(list(data))
-        df = df.drop_duplicates(['Time'])
+        try:
+            df = df.drop_duplicates(['Time'])
+        except:
+            raise TypeError('目前没有该时间段的数据')
+
         del df['_id']
         for utc_str in df['Time']:
             local_time = self.utc_to_local(utc_str)
             df['Time'].replace(utc_str, local_time, inplace=True)
 
         data = df[['Open', 'Close', 'High', 'Low', 'QuoteAssetVolume', 'QuoteVolume', 'Time']].set_index('Time')
-        print(data)
-        # exit()
-        ohlc_dict = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'QuoteVolume': 'sum', 'QuoteAssetVolume':'sum'}
+        data.rename(columns={'Open': 'open', 'Close': 'close', 'High': 'high', 'Low':'low'}, inplace=True)
+        ohlc_dict = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'QuoteVolume': 'sum', 'QuoteAssetVolume':'sum'}
+        data[['open', 'close', 'high', 'low','QuoteAssetVolume', 'QuoteVolume']] = data[['open', 'close', 'high', 'low','QuoteAssetVolume', 'QuoteVolume']].astype(float)
         data.index = pd.to_datetime(data.index)
         if freq == '5T':
             return self.get_5T(data, ohlc_dict, type)
@@ -237,72 +263,70 @@ class HistoryDBData(object):
     def get_5T(self, data, ohlc_dict, type):
         new_data = data.resample('5T', closed='right', label='right').agg(ohlc_dict)
         print(new_data)
-        if type == 'Close':
-            return new_data[['Close', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'Open':
-            return new_data[['Open', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'High':
-            return new_data[['High', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'Low':
-            return new_data[['Low', 'QuoteAssetVolume', 'QuoteVolume']]
+        if type == 'close':
+            return new_data[['close', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'open':
+            return new_data[['open', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'high':
+            return new_data[['high', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'low':
+            return new_data[['low', 'QuoteAssetVolume', 'QuoteVolume']]
         else:
             raise TypeError('无 数据')
 
     def get_15T(self, data, ohlc_dict, type):
         new_data = data.resample('15T', closed='right', label='right').agg(ohlc_dict)
         print(new_data)
-        if type == 'Close':
-            return new_data[['Close', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'Open':
-            return new_data[['Open', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'High':
-            return new_data[['High', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'Low':
-            return new_data[['Low', 'QuoteAssetVolume', 'QuoteVolume']]
+        if type == 'close':
+            return new_data[['close', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'open':
+            return new_data[['open', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'high':
+            return new_data[['high', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'low':
+            return new_data[['low', 'QuoteAssetVolume', 'QuoteVolume']]
         else:
             raise TypeError('无 数据')
-        pass
 
     def get_30T(self, data, ohlc_dict, type):
         new_data = data.resample('30T', closed='right', label='right').agg(ohlc_dict)
         print(new_data)
-        if type == 'Close':
-            return new_data[['Close', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'Open':
-            return new_data[['Open', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'High':
-            return new_data[['High', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'Low':
-            return new_data[['Low', 'QuoteAssetVolume', 'QuoteVolume']]
+        if type == 'close':
+            return new_data[['close', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'open':
+            return new_data[['open', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'high':
+            return new_data[['high', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'low':
+            return new_data[['low', 'QuoteAssetVolume', 'QuoteVolume']]
         else:
             raise TypeError('无 数据')
 
     def get_1H(self, data, ohlc_dict, type):
         new_data = data.resample('1H', closed='right', label='right').agg(ohlc_dict)
         print(new_data)
-        if type == 'Close':
-            return new_data[['Close', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'Open':
-            return new_data[['Open', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'High':
-            return new_data[['High', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'Low':
-            return new_data[['Low', 'QuoteAssetVolume', 'QuoteVolume']]
+        if type == 'close':
+            return new_data[['close', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'open':
+            return new_data[['open', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'high':
+            return new_data[['high', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'low':
+            return new_data[['low', 'QuoteAssetVolume', 'QuoteVolume']]
         else:
             raise TypeError('无 数据')
 
     def get_4H(self, data, ohlc_dict, type):
-        data[['QuoteAssetVolume', 'QuoteVolume']] = data[['QuoteAssetVolume', 'QuoteVolume']].astype(float)
         new_data = data.resample('4H', closed='right', label='right').agg(ohlc_dict)
         print(new_data)
-        if type == 'Close':
-            return new_data[['Close', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'Open':
-            return new_data[['Open', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'High':
-            return new_data[['High', 'QuoteAssetVolume', 'QuoteVolume']]
-        elif type == 'Low':
-            return new_data[['Low', 'QuoteAssetVolume', 'QuoteVolume']]
+        if type == 'close':
+            return new_data[['close', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'open':
+            return new_data[['open', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'high':
+            return new_data[['high', 'QuoteAssetVolume', 'QuoteVolume']]
+        elif type == 'low':
+            return new_data[['low', 'QuoteAssetVolume', 'QuoteVolume']]
         else:
             raise TypeError('无 数据')
 
@@ -316,7 +340,7 @@ class HistoryDBData(object):
 if __name__ == '__main__':
     # data = HistoryCSVData().get_history_data(start='2017-01-02', end='2017-01-03', freq='5T',type='open')
     mongo = HistoryDBData()
-    data_df = mongo.get_history_data(start='2018-08-16', end='2018-08-17', type='Close', freq='4H')
+    data_df = mongo.get_history_data(symbol='BTCUSD', start='2017-07-16', end='2017-07-18', type='close', freq='4H')
     print(data_df)
     mongo.closeDB()
 
